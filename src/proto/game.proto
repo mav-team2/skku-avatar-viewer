@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package game;
+
+// Message types
+enum MessageType {
+  AVATAR_CREATE = 0;
+  AVATAR_MOVE = 1;
+  OBJECT_CREATE = 2;
+  OBJECT_PICKUP = 3;
+}
+
+// Avatar data
+message AvatarData {
+  string id = 1;
+  float x = 2;
+  float y = 3;
+  string name = 4;
+  optional Velocity velocity = 5;
+  optional string spriteUrl = 6; // Base URL for sprite assets (e.g., www.domain.com/avatar_id)
+}
+
+// Velocity
+message Velocity {
+  float x = 1;
+  float y = 2;
+}
+
+// Object data
+message GameObjectData {
+  string id = 1;
+  float x = 2;
+  float y = 3;
+  string type = 4;
+  optional string spriteUrl = 5; // URL for object sprite
+}
+
+// Movement data
+message MovementData {
+  string id = 1;
+  float x = 2;
+  float y = 3;
+}
+
+// Pickup data
+message PickupData {
+  string avatarId = 1;
+  string objectId = 2;
+}
+
+// Game message wrapper
+message GameMessage {
+  MessageType type = 1;
+  oneof payload {
+    AvatarData avatarData = 2;
+    GameObjectData objectData = 3;
+    MovementData movementData = 4;
+    PickupData pickupData = 5;
+  }
+}
