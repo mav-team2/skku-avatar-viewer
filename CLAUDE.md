@@ -90,6 +90,17 @@ Avatars automatically switch animations based on movement state:
   export const MessageType = { ... } as const;
   export type MessageType = typeof MessageType[keyof typeof MessageType];
   ```
+- **No parameter properties**: Cannot use `private` in constructor parameters
+  ```typescript
+  // Wrong - erasableSyntaxOnly error
+  constructor(private game: GameApplication) {}
+
+  // Correct
+  private game: GameApplication;
+  constructor(game: GameApplication) {
+    this.game = game;
+  }
+  ```
 
 ## Vite Path Aliases
 

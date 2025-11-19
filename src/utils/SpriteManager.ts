@@ -1,19 +1,17 @@
-import { Assets, Texture, Sprite } from 'pixi.js';
+import { Assets, Texture } from 'pixi.js';
 
-export type SpriteAction = 'walk' | 'stand' | 'run';
+export type SpriteAction = 'stand' | 'walk' | 'run';
 
 export interface SpriteSet {
-  walk?: Texture;
   stand?: Texture;
+  walk?: Texture;
   run?: Texture;
 }
 
-export class SpriteManager {
+class SpriteManager {
   private static instance: SpriteManager;
   private spriteCache: Map<string, SpriteSet> = new Map();
   private loadingPromises: Map<string, Promise<SpriteSet>> = new Map();
-
-  private constructor() {}
 
   static getInstance(): SpriteManager {
     if (!SpriteManager.instance) {
@@ -23,60 +21,28 @@ export class SpriteManager {
   }
 
   /**
-   * Build sprite URL based on CloudFront domain, avatar ID, and action
-   */
-  buildSpriteUrl(domain: string, avatarId: string, action: SpriteAction): string {
-    return `https://www.${domain}/${avatarId}/${action}`;
-  }
-
-  /**
-   * Parse sprite base URL to extract domain and avatar ID
-   */
-  parseSpriteBaseUrl(baseUrl: string): { domain: string; avatarId: string } | null {
-    try {
-      const urlMatch = baseUrl.match(/https?:\/\/www\.([^\/]+)\/([^\/]+)/);
-      if (urlMatch) {
-        return {
-          domain: urlMatch[1],
-          avatarId: urlMatch[2],
-        };
-      }
-      return null;
-    } catch (error) {
-      console.error('Failed to parse sprite base URL:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Load sprite set for an avatar (walk, stand, run)
+   * 아바타 스프라이트 세트를 로드합니다.
+   * URL 형식: www.domain.com/{avatar_id}/{status}
+   *
+   * @param baseUrl - 아바타 베이스 URL (예: www.domain.com/avatar123)
+   * @returns SpriteSet containing stand, walk, run textures
    */
   async loadSpriteSet(baseUrl: string): Promise<SpriteSet> {
-    // Check cache first
+    // 캐시된 스프라이트 반환
     if (this.spriteCache.has(baseUrl)) {
       return this.spriteCache.get(baseUrl)!;
     }
 
-    // Check if already loading
+    // 이미 로딩 중인 경우 Promise 공유
     if (this.loadingPromises.has(baseUrl)) {
       return this.loadingPromises.get(baseUrl)!;
     }
 
-    // Parse URL to get domain and avatar ID
-    const parsed = this.parseSpriteBaseUrl(baseUrl);
-    if (!parsed) {
-      console.warn(`Invalid sprite base URL: ${baseUrl}`);
-      return {};
-    }
-
-    const { domain, avatarId } = parsed;
-
-    // Create loading promise
-    const loadingPromise = this.loadSpritesFromServer(domain, avatarId);
-    this.loadingPromises.set(baseUrl, loadingPromise);
+    const loadPromise = this.loadAllActions(baseUrl);
+    this.loadingPromises.set(baseUrl, loadPromise);
 
     try {
-      const spriteSet = await loadingPromise;
+      const spriteSet = await loadPromise;
       this.spriteCache.set(baseUrl, spriteSet);
       return spriteSet;
     } finally {
@@ -85,21 +51,33 @@ export class SpriteManager {
   }
 
   /**
-   * Load individual sprite action textures from server
+   * 단일 텍스처를 로드합니다 (GameObject용)
    */
-  private async loadSpritesFromServer(domain: string, avatarId: string): Promise<SpriteSet> {
-    const actions: SpriteAction[] = ['walk', 'stand', 'run'];
+  async loadTexture(url: string): Promise<Texture | null> {
+    try {
+      const normalizedUrl = this.normalizeUrl(url);
+      const texture = await Assets.load(normalizedUrl);
+      return texture;
+    } catch (error) {
+      console.warn(`[SpriteManager] Failed to load texture: ${url}`);
+      return null;
+    }
+  }
+
+  private async loadAllActions(baseUrl: string): Promise<SpriteSet> {
+    const actions: SpriteAction[] = ['stand', 'walk', 'run'];
     const spriteSet: SpriteSet = {};
 
+    // 모든 액션 스프라이트를 병렬로 로드
     const loadPromises = actions.map(async (action) => {
+      const url = this.buildSpriteUrl(baseUrl, action);
       try {
-        const url = this.buildSpriteUrl(domain, avatarId, action);
         const texture = await Assets.load(url);
         spriteSet[action] = texture;
-        console.log(`✅ Loaded sprite: ${avatarId}/${action}`);
+        console.log(`[SpriteManager] Loaded: ${url}`);
       } catch (error) {
-        console.warn(`⚠️ Failed to load sprite: ${avatarId}/${action}`, error);
-        // Continue loading other sprites even if one fails
+        console.warn(`[SpriteManager] Failed to load ${action}: ${url}`);
+        // 개별 액션 실패는 허용 (fallback 사용)
       }
     });
 
@@ -107,62 +85,31 @@ export class SpriteManager {
     return spriteSet;
   }
 
-  /**
-   * Create a sprite from a loaded sprite set
-   */
-  createSprite(spriteSet: SpriteSet, defaultAction: SpriteAction = 'stand'): Sprite {
-    // Try to use the default action texture
-    let texture = spriteSet[defaultAction];
+  private buildSpriteUrl(baseUrl: string, action: SpriteAction): string {
+    const normalizedUrl = this.normalizeUrl(baseUrl);
+    return `${normalizedUrl}/${action}`;
+  }
 
-    // Fallback to any available texture
-    if (!texture) {
-      texture = spriteSet.stand || spriteSet.walk || spriteSet.run;
+  private normalizeUrl(url: string): string {
+    // 끝 슬래시 제거
+    let normalized = url.replace(/\/$/, '');
+
+    // 프로토콜이 없으면 https:// 추가
+    if (!normalized.startsWith('http')) {
+      normalized = `https://${normalized}`;
     }
 
-    // Final fallback to white texture
-    if (!texture) {
-      texture = Texture.WHITE;
-    }
-
-    return new Sprite(texture);
+    return normalized;
   }
 
-  /**
-   * Get texture for specific action from sprite set
-   */
-  getActionTexture(spriteSet: SpriteSet, action: SpriteAction): Texture | undefined {
-    return spriteSet[action];
+  getActionTexture(spriteSet: SpriteSet, action: SpriteAction): Texture | null {
+    return spriteSet[action] ?? null;
   }
 
-  /**
-   * Check if sprite set has a specific action
-   */
-  hasAction(spriteSet: SpriteSet, action: SpriteAction): boolean {
-    return !!spriteSet[action];
-  }
-
-  /**
-   * Clear cache for a specific base URL
-   */
-  clearCache(baseUrl: string): void {
-    this.spriteCache.delete(baseUrl);
-  }
-
-  /**
-   * Clear all cached sprites
-   */
-  clearAllCache(): void {
+  clearCache(): void {
     this.spriteCache.clear();
     this.loadingPromises.clear();
   }
-
-  /**
-   * Get cache statistics
-   */
-  getCacheStats(): { cached: number; loading: number } {
-    return {
-      cached: this.spriteCache.size,
-      loading: this.loadingPromises.size,
-    };
-  }
 }
+
+export const spriteManager = SpriteManager.getInstance();

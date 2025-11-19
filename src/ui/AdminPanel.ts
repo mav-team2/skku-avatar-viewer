@@ -1,444 +1,243 @@
-export interface AdminPanelCallbacks {
-  onCreateAvatar: (id: string, x: number, y: number, spriteUrl?: string) => void;
-  onMoveAvatar: (id: string, x: number, y: number) => void;
-  onCreateObject: (id: string, x: number, y: number, type: string, spriteUrl?: string) => void;
-  onPickupObject: (avatarId: string, objectId: string) => void;
-}
+import type { GameApplication } from '../core/GameApplication';
 
+/**
+ * Admin panel for testing game functionality
+ * Toggle with Z + 3 clicks easter egg
+ */
 export class AdminPanel {
-  private container: HTMLDivElement;
-  private isVisible: boolean = false;
-  private callbacks: AdminPanelCallbacks;
+  private panel: HTMLDivElement;
+  private isVisible = false;
+  private avatarCount = 0;
+  private objectCount = 0;
+  private game: GameApplication;
 
-  constructor(callbacks: AdminPanelCallbacks) {
-    this.callbacks = callbacks;
-    this.container = this.createPanel();
-    document.body.appendChild(this.container);
+  constructor(game: GameApplication) {
+    this.game = game;
+    this.panel = this.createPanel();
+    document.body.appendChild(this.panel);
   }
 
   private createPanel(): HTMLDivElement {
     const panel = document.createElement('div');
     panel.id = 'admin-panel';
-    panel.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.95);
-      border: 2px solid #00ff00;
-      border-radius: 10px;
-      padding: 20px;
-      color: #00ff00;
-      font-family: 'Courier New', monospace;
-      font-size: 14px;
-      z-index: 10000;
-      display: none;
-      min-width: 400px;
-      max-height: 80vh;
-      overflow-y: auto;
-      box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
-    `;
-
     panel.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 style="margin: 0; font-size: 20px; text-shadow: 0 0 10px #00ff00;">🎮 Admin Panel</h2>
-        <button id="close-admin-panel" style="
-          background: transparent;
-          border: 1px solid #00ff00;
-          color: #00ff00;
-          padding: 5px 10px;
+      <style>
+        #admin-panel {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          width: 320px;
+          background: rgba(26, 26, 46, 0.95);
+          border: 2px solid #4ecdc4;
+          border-radius: 8px;
+          padding: 16px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          font-size: 14px;
+          color: #ffffff;
+          z-index: 10000;
+          display: none;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        #admin-panel.visible {
+          display: block;
+        }
+
+        #admin-panel h3 {
+          margin: 0 0 16px 0;
+          color: #4ecdc4;
+          font-size: 16px;
+          border-bottom: 1px solid #4ecdc4;
+          padding-bottom: 8px;
+        }
+
+        #admin-panel .section {
+          margin-bottom: 16px;
+        }
+
+        #admin-panel .section-title {
+          font-weight: bold;
+          margin-bottom: 8px;
+          color: #ff6b6b;
+        }
+
+        #admin-panel label {
+          display: block;
+          margin-bottom: 4px;
+          color: #cccccc;
+        }
+
+        #admin-panel input {
+          width: 100%;
+          padding: 8px;
+          margin-bottom: 8px;
+          border: 1px solid #333;
+          border-radius: 4px;
+          background: #2a2a4e;
+          color: #ffffff;
+          box-sizing: border-box;
+        }
+
+        #admin-panel input:focus {
+          outline: none;
+          border-color: #4ecdc4;
+        }
+
+        #admin-panel button {
+          width: 100%;
+          padding: 10px;
+          margin-bottom: 8px;
+          border: none;
+          border-radius: 4px;
           cursor: pointer;
-          border-radius: 5px;
-          font-family: 'Courier New', monospace;
-        ">✕ Close</button>
+          font-weight: bold;
+          transition: background-color 0.2s;
+        }
+
+        #admin-panel .btn-primary {
+          background: #4ecdc4;
+          color: #1a1a2e;
+        }
+
+        #admin-panel .btn-primary:hover {
+          background: #3dbdb5;
+        }
+
+        #admin-panel .btn-secondary {
+          background: #ff6b6b;
+          color: #ffffff;
+        }
+
+        #admin-panel .btn-secondary:hover {
+          background: #ff5252;
+        }
+
+        #admin-panel .btn-warning {
+          background: #f9ca24;
+          color: #1a1a2e;
+        }
+
+        #admin-panel .btn-warning:hover {
+          background: #f0b90b;
+        }
+
+        #admin-panel .close-btn {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          background: none;
+          border: none;
+          color: #ffffff;
+          font-size: 20px;
+          cursor: pointer;
+          width: auto;
+          padding: 4px 8px;
+          margin: 0;
+        }
+
+        #admin-panel .close-btn:hover {
+          color: #ff6b6b;
+        }
+      </style>
+
+      <button class="close-btn" id="close-admin-panel">&times;</button>
+      <h3>🎮 Admin Panel</h3>
+
+      <div class="section">
+        <div class="section-title">Create Avatar</div>
+        <label>Position X</label>
+        <input type="number" id="avatar-x" value="400" />
+        <label>Position Y</label>
+        <input type="number" id="avatar-y" value="300" />
+        <label>Sprite URL (optional)</label>
+        <input type="text" id="avatar-sprite" placeholder="www.domain.com/avatar_id" />
+        <button class="btn-primary" id="create-avatar">Create Avatar</button>
       </div>
 
-      <div style="margin-bottom: 15px;">
-        <div style="background: rgba(0, 255, 0, 0.1); padding: 10px; border-radius: 5px; margin-bottom: 10px;">
-          <strong>🎯 Easter Egg Activated!</strong><br/>
-          <small>z + 3 clicks to toggle</small>
-        </div>
+      <div class="section">
+        <div class="section-title">Move Avatar</div>
+        <label>Avatar ID</label>
+        <input type="text" id="move-avatar-id" placeholder="avatar_0" />
+        <label>Target X</label>
+        <input type="number" id="move-x" value="600" />
+        <label>Target Y</label>
+        <input type="number" id="move-y" value="400" />
+        <button class="btn-warning" id="move-avatar">Move Avatar</button>
       </div>
 
-      <!-- Avatar Creation -->
-      <div style="margin-bottom: 20px; border: 1px solid #00ff00; padding: 15px; border-radius: 5px;">
-        <h3 style="margin: 0 0 10px 0; font-size: 16px;">👤 Create Avatar</h3>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
-          <input type="text" id="avatar-id" placeholder="Avatar ID" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            flex: 1;
-            min-width: 100px;
-          " />
-          <input type="number" id="avatar-x" placeholder="X" value="400" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            width: 80px;
-          " />
-          <input type="number" id="avatar-y" placeholder="Y" value="300" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            width: 80px;
-          " />
-          <button id="create-avatar-btn" style="
-            background: #00ff00;
-            border: none;
-            color: black;
-            padding: 8px 15px;
-            cursor: pointer;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-          ">Create</button>
-        </div>
-        <input type="text" id="avatar-sprite-url" placeholder="Sprite URL (optional, e.g., www.domain.com/avatar_id)" style="
-          background: rgba(0, 255, 0, 0.05);
-          border: 1px solid rgba(0, 255, 0, 0.3);
-          color: #00ff00;
-          padding: 8px;
-          border-radius: 5px;
-          font-family: 'Courier New', monospace;
-          width: 100%;
-          font-size: 12px;
-        " />
+      <div class="section">
+        <div class="section-title">Create Object</div>
+        <label>Position X</label>
+        <input type="number" id="object-x" value="500" />
+        <label>Position Y</label>
+        <input type="number" id="object-y" value="350" />
+        <label>Sprite URL (optional)</label>
+        <input type="text" id="object-sprite" placeholder="www.domain.com/object.png" />
+        <button class="btn-primary" id="create-object">Create Object</button>
       </div>
 
-      <!-- Avatar Movement -->
-      <div style="margin-bottom: 20px; border: 1px solid #00ff00; padding: 15px; border-radius: 5px;">
-        <h3 style="margin: 0 0 10px 0; font-size: 16px;">🏃 Move Avatar</h3>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-          <input type="text" id="move-avatar-id" placeholder="Avatar ID" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            flex: 1;
-            min-width: 100px;
-          " />
-          <input type="number" id="move-x" placeholder="X" value="600" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            width: 80px;
-          " />
-          <input type="number" id="move-y" placeholder="Y" value="400" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            width: 80px;
-          " />
-          <button id="move-avatar-btn" style="
-            background: #00ff00;
-            border: none;
-            color: black;
-            padding: 8px 15px;
-            cursor: pointer;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-          ">Move</button>
-        </div>
-      </div>
-
-      <!-- Object Creation -->
-      <div style="margin-bottom: 20px; border: 1px solid #00ff00; padding: 15px; border-radius: 5px;">
-        <h3 style="margin: 0 0 10px 0; font-size: 16px;">📦 Create Object</h3>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
-          <input type="text" id="object-id" placeholder="Object ID" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            flex: 1;
-            min-width: 80px;
-          " />
-          <input type="text" id="object-type" placeholder="Type" value="item" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            width: 80px;
-          " />
-          <input type="number" id="object-x" placeholder="X" value="200" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            width: 70px;
-          " />
-          <input type="number" id="object-y" placeholder="Y" value="200" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            width: 70px;
-          " />
-          <button id="create-object-btn" style="
-            background: #00ff00;
-            border: none;
-            color: black;
-            padding: 8px 15px;
-            cursor: pointer;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-          ">Create</button>
-        </div>
-        <input type="text" id="object-sprite-url" placeholder="Sprite URL (optional)" style="
-          background: rgba(0, 255, 0, 0.05);
-          border: 1px solid rgba(0, 255, 0, 0.3);
-          color: #00ff00;
-          padding: 8px;
-          border-radius: 5px;
-          font-family: 'Courier New', monospace;
-          width: 100%;
-          font-size: 12px;
-        " />
-      </div>
-
-      <!-- Object Pickup -->
-      <div style="margin-bottom: 20px; border: 1px solid #00ff00; padding: 15px; border-radius: 5px;">
-        <h3 style="margin: 0 0 10px 0; font-size: 16px;">✋ Pickup Object</h3>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-          <input type="text" id="pickup-avatar-id" placeholder="Avatar ID" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            flex: 1;
-            min-width: 100px;
-          " />
-          <input type="text" id="pickup-object-id" placeholder="Object ID" style="
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            flex: 1;
-            min-width: 100px;
-          " />
-          <button id="pickup-object-btn" style="
-            background: #00ff00;
-            border: none;
-            color: black;
-            padding: 8px 15px;
-            cursor: pointer;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-          ">Pickup</button>
-        </div>
-      </div>
-
-      <!-- Quick Actions -->
-      <div style="border: 1px solid #00ff00; padding: 15px; border-radius: 5px;">
-        <h3 style="margin: 0 0 10px 0; font-size: 16px;">⚡ Quick Actions</h3>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-          <button id="random-avatar-btn" style="
-            background: transparent;
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px 15px;
-            cursor: pointer;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            flex: 1;
-          ">Random Avatar</button>
-          <button id="random-object-btn" style="
-            background: transparent;
-            border: 1px solid #00ff00;
-            color: #00ff00;
-            padding: 8px 15px;
-            cursor: pointer;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            flex: 1;
-          ">Random Object</button>
-        </div>
-      </div>
-
-      <div style="margin-top: 15px; text-align: center; font-size: 12px; color: rgba(0, 255, 0, 0.6);">
-        Press ESC or click Close to hide
+      <div class="section">
+        <div class="section-title">Pickup Object</div>
+        <label>Object ID</label>
+        <input type="text" id="pickup-object-id" placeholder="object_0" />
+        <button class="btn-secondary" id="pickup-object">Pickup Object</button>
       </div>
     `;
 
-    this.setupEventListeners(panel);
     return panel;
   }
 
-  private setupEventListeners(panel: HTMLDivElement): void {
+  private setupEventListeners(): void {
     // Close button
-    const closeBtn = panel.querySelector('#close-admin-panel') as HTMLButtonElement;
-    closeBtn.addEventListener('click', () => this.hide());
+    document.getElementById('close-admin-panel')?.addEventListener('click', () => {
+      this.hide();
+    });
 
     // Create Avatar
-    const createAvatarBtn = panel.querySelector('#create-avatar-btn') as HTMLButtonElement;
-    createAvatarBtn.addEventListener('click', () => {
-      const id = (panel.querySelector('#avatar-id') as HTMLInputElement).value;
-      const x = parseFloat((panel.querySelector('#avatar-x') as HTMLInputElement).value);
-      const y = parseFloat((panel.querySelector('#avatar-y') as HTMLInputElement).value);
-      const spriteUrl = (panel.querySelector('#avatar-sprite-url') as HTMLInputElement).value.trim();
+    document.getElementById('create-avatar')?.addEventListener('click', () => {
+      const x = parseInt((document.getElementById('avatar-x') as HTMLInputElement).value) || 400;
+      const y = parseInt((document.getElementById('avatar-y') as HTMLInputElement).value) || 300;
+      const spriteUrl = (document.getElementById('avatar-sprite') as HTMLInputElement).value || undefined;
 
-      if (id) {
-        this.callbacks.onCreateAvatar(id, x, y, spriteUrl || undefined);
-        this.showNotification(`Avatar "${id}" created at (${x}, ${y})`);
-      }
+      const id = `avatar_${this.avatarCount++}`;
+      this.game.testCreateAvatar(id, x, y, spriteUrl);
+
+      // Update move avatar ID field
+      (document.getElementById('move-avatar-id') as HTMLInputElement).value = id;
     });
 
     // Move Avatar
-    const moveAvatarBtn = panel.querySelector('#move-avatar-btn') as HTMLButtonElement;
-    moveAvatarBtn.addEventListener('click', () => {
-      const id = (panel.querySelector('#move-avatar-id') as HTMLInputElement).value;
-      const x = parseFloat((panel.querySelector('#move-x') as HTMLInputElement).value);
-      const y = parseFloat((panel.querySelector('#move-y') as HTMLInputElement).value);
+    document.getElementById('move-avatar')?.addEventListener('click', () => {
+      const id = (document.getElementById('move-avatar-id') as HTMLInputElement).value;
+      const x = parseInt((document.getElementById('move-x') as HTMLInputElement).value) || 600;
+      const y = parseInt((document.getElementById('move-y') as HTMLInputElement).value) || 400;
 
       if (id) {
-        this.callbacks.onMoveAvatar(id, x, y);
-        this.showNotification(`Avatar "${id}" moving to (${x}, ${y})`);
+        this.game.testMoveAvatar(id, x, y);
       }
     });
 
     // Create Object
-    const createObjectBtn = panel.querySelector('#create-object-btn') as HTMLButtonElement;
-    createObjectBtn.addEventListener('click', () => {
-      const id = (panel.querySelector('#object-id') as HTMLInputElement).value;
-      const type = (panel.querySelector('#object-type') as HTMLInputElement).value;
-      const x = parseFloat((panel.querySelector('#object-x') as HTMLInputElement).value);
-      const y = parseFloat((panel.querySelector('#object-y') as HTMLInputElement).value);
-      const spriteUrl = (panel.querySelector('#object-sprite-url') as HTMLInputElement).value.trim();
+    document.getElementById('create-object')?.addEventListener('click', () => {
+      const x = parseInt((document.getElementById('object-x') as HTMLInputElement).value) || 500;
+      const y = parseInt((document.getElementById('object-y') as HTMLInputElement).value) || 350;
+      const spriteUrl = (document.getElementById('object-sprite') as HTMLInputElement).value || undefined;
 
-      if (id) {
-        this.callbacks.onCreateObject(id, x, y, type, spriteUrl || undefined);
-        this.showNotification(`Object "${id}" created at (${x}, ${y})`);
-      }
+      const id = `object_${this.objectCount++}`;
+      this.game.testCreateObject(id, x, y, spriteUrl);
+
+      // Update pickup object ID field
+      (document.getElementById('pickup-object-id') as HTMLInputElement).value = id;
     });
 
     // Pickup Object
-    const pickupObjectBtn = panel.querySelector('#pickup-object-btn') as HTMLButtonElement;
-    pickupObjectBtn.addEventListener('click', () => {
-      const avatarId = (panel.querySelector('#pickup-avatar-id') as HTMLInputElement).value;
-      const objectId = (panel.querySelector('#pickup-object-id') as HTMLInputElement).value;
+    document.getElementById('pickup-object')?.addEventListener('click', () => {
+      const objectId = (document.getElementById('pickup-object-id') as HTMLInputElement).value;
 
-      if (avatarId && objectId) {
-        this.callbacks.onPickupObject(avatarId, objectId);
-        this.showNotification(`Avatar "${avatarId}" picked up "${objectId}"`);
+      if (objectId) {
+        this.game.pickupObject(objectId, 'admin');
       }
     });
-
-    // Random Avatar
-    const randomAvatarBtn = panel.querySelector('#random-avatar-btn') as HTMLButtonElement;
-    randomAvatarBtn.addEventListener('click', () => {
-      const id = `avatar-${Date.now()}`;
-      const x = Math.random() * window.innerWidth;
-      const y = Math.random() * window.innerHeight;
-      this.callbacks.onCreateAvatar(id, x, y, undefined);
-      this.showNotification(`Random avatar "${id}" created`);
-    });
-
-    // Random Object
-    const randomObjectBtn = panel.querySelector('#random-object-btn') as HTMLButtonElement;
-    randomObjectBtn.addEventListener('click', () => {
-      const id = `object-${Date.now()}`;
-      const x = Math.random() * window.innerWidth;
-      const y = Math.random() * window.innerHeight;
-      const types = ['coin', 'gem', 'item', 'powerup'];
-      const type = types[Math.floor(Math.random() * types.length)];
-      this.callbacks.onCreateObject(id, x, y, type, undefined);
-      this.showNotification(`Random object "${id}" created`);
-    });
-
-    // ESC key to close
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.isVisible) {
-        this.hide();
-      }
-    });
-  }
-
-  private showNotification(message: string): void {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: rgba(0, 255, 0, 0.9);
-      color: black;
-      padding: 15px 20px;
-      border-radius: 5px;
-      font-family: 'Courier New', monospace;
-      font-weight: bold;
-      z-index: 10001;
-      box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
-      animation: slideIn 0.3s ease-out;
-    `;
-    notification.textContent = message;
-
-    // Add animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes slideIn {
-        from {
-          transform: translateX(100%);
-          opacity: 0;
-        }
-        to {
-          transform: translateX(0);
-          opacity: 1;
-        }
-      }
-    `;
-    document.head.appendChild(style);
-
-    document.body.appendChild(notification);
-
-    setTimeout(() => {
-      notification.style.transition = 'opacity 0.3s';
-      notification.style.opacity = '0';
-      setTimeout(() => {
-        document.body.removeChild(notification);
-      }, 300);
-    }, 2000);
-  }
-
-  show(): void {
-    this.isVisible = true;
-    this.container.style.display = 'block';
-  }
-
-  hide(): void {
-    this.isVisible = false;
-    this.container.style.display = 'none';
   }
 
   toggle(): void {
@@ -449,9 +248,20 @@ export class AdminPanel {
     }
   }
 
+  show(): void {
+    this.panel.classList.add('visible');
+    this.isVisible = true;
+    this.setupEventListeners();
+    console.log('[AdminPanel] Shown');
+  }
+
+  hide(): void {
+    this.panel.classList.remove('visible');
+    this.isVisible = false;
+    console.log('[AdminPanel] Hidden');
+  }
+
   destroy(): void {
-    if (this.container.parentElement) {
-      document.body.removeChild(this.container);
-    }
+    this.panel.remove();
   }
 }

@@ -1,244 +1,186 @@
-import { Application, Container } from "pixi.js";
-import { Avatar, type AvatarData } from "../entities/Avatar";
-import { GameObject, type GameObjectData } from "../entities/GameObject";
-import { WebSocketManager, MessageType } from "../network/WebSocketManager";
-import { AdminPanel, type AdminPanelCallbacks } from "../ui/AdminPanel";
-import { EasterEggHandler } from "../utils/EasterEggHandler";
+import { Application, Container } from 'pixi.js';
+import { Avatar, type AvatarData } from '../entities/Avatar';
+import { GameObject, type GameObjectData } from '../entities/GameObject';
+import { WebSocketManager, MessageType } from '../network/WebSocketManager';
 
 export class GameApplication {
   private app: Application;
   private gameContainer: Container;
   private avatars: Map<string, Avatar> = new Map();
-  private objects: Map<string, GameObject> = new Map();
+  private gameObjects: Map<string, GameObject> = new Map();
   private wsManager: WebSocketManager;
-  private isInitialized: boolean = false;
-  private adminPanel: AdminPanel | null = null;
-  private easterEggHandler: EasterEggHandler | null = null;
 
-  constructor(serverUrl: string = "ws://localhost:8080") {
+  constructor(wsUrl: string) {
     this.app = new Application();
     this.gameContainer = new Container();
-    this.wsManager = new WebSocketManager(serverUrl);
+    this.wsManager = new WebSocketManager(wsUrl);
   }
 
-  async init(): Promise<void> {
-    if (this.isInitialized) {
-      console.warn("Game already initialized");
-      return;
-    }
-
-    // Initialize PixiJS application
+  async init(container: HTMLElement): Promise<void> {
     await this.app.init({
-      width: window.innerWidth,
-      height: window.innerHeight,
-      backgroundColor: 0x1a1a2e,
       resizeTo: window,
+      backgroundColor: 0x1a1a2e,
       antialias: true,
     });
 
-    // Append canvas to document
-    document.body.appendChild(this.app.canvas);
-
-    // Add game container to stage
+    container.appendChild(this.app.canvas);
     this.app.stage.addChild(this.gameContainer);
 
-    // Setup WebSocket event handlers
     this.setupWebSocketHandlers();
+    this.setupGameLoop();
 
-    // Start game loop
-    this.app.ticker.add((ticker) => {
-      this.update(ticker.deltaTime / 60); // Convert to seconds
-    });
+    // WebSocket 연결
+    this.wsManager.connect();
 
-    // Connect to game server
-    try {
-      await this.wsManager.connect();
-      console.log("Connected to game server");
-    } catch (error) {
-      console.error("Failed to connect to game server:", error);
-    }
-
-    // Setup admin panel and easter egg
-    this.setupAdminPanel();
-
-    this.isInitialized = true;
-  }
-
-  private setupAdminPanel(): void {
-    // Create admin panel callbacks
-    const callbacks: AdminPanelCallbacks = {
-      onCreateAvatar: (
-        id: string,
-        x: number,
-        y: number,
-        spriteUrl?: string
-      ) => {
-        this.createAvatar({ id, x, y, spriteUrl });
-      },
-      onMoveAvatar: (id: string, x: number, y: number) => {
-        this.moveAvatar(id, x, y);
-      },
-      onCreateObject: (
-        id: string,
-        x: number,
-        y: number,
-        type: string,
-        spriteUrl?: string
-      ) => {
-        this.createObject({ id, x, y, type, spriteUrl });
-      },
-      onPickupObject: (avatarId: string, objectId: string) => {
-        this.pickupObject(avatarId, objectId);
-      },
-    };
-
-    // Create admin panel
-    this.adminPanel = new AdminPanel(callbacks);
-
-    // Setup easter egg handler
-    this.easterEggHandler = new EasterEggHandler(() => {
-      if (this.adminPanel) {
-        this.adminPanel.toggle();
-      }
-    });
+    console.log('[GameApplication] Initialized');
   }
 
   private setupWebSocketHandlers(): void {
-    // Avatar creation
-    this.wsManager.on(MessageType.AVATAR_CREATE, (data: AvatarData) => {
+    // 아바타 생성 - spriteUrl에서 스프라이트 다운로드
+    this.wsManager.on(MessageType.AVATAR_CREATE, (payload) => {
+      const data = payload as AvatarData;
       this.createAvatar(data);
     });
 
-    // Avatar movement
-    this.wsManager.on(
-      MessageType.AVATAR_MOVE,
-      (data: { id: string; x: number; y: number }) => {
-        this.moveAvatar(data.id, data.x, data.y);
-      }
-    );
+    // 아바타 이동
+    this.wsManager.on(MessageType.AVATAR_MOVE, (payload) => {
+      const { id, x, y } = payload as { id: string; x: number; y: number };
+      this.moveAvatar(id, x, y);
+    });
 
-    // Object creation
-    this.wsManager.on(MessageType.OBJECT_CREATE, (data: GameObjectData) => {
+    // 아바타 제거
+    this.wsManager.on(MessageType.AVATAR_REMOVE, (payload) => {
+      const { id } = payload as { id: string };
+      this.removeAvatar(id);
+    });
+
+    // 오브젝트 생성
+    this.wsManager.on(MessageType.OBJECT_CREATE, (payload) => {
+      const data = payload as GameObjectData;
       this.createObject(data);
     });
 
-    // Object pickup
-    this.wsManager.on(
-      MessageType.OBJECT_PICKUP,
-      (data: { avatarId: string; objectId: string }) => {
-        this.pickupObject(data.avatarId, data.objectId);
-      }
-    );
+    // 오브젝트 픽업
+    this.wsManager.on(MessageType.OBJECT_PICKUP, (payload) => {
+      const { objectId, avatarId } = payload as { objectId: string; avatarId: string };
+      this.pickupObject(objectId, avatarId);
+    });
   }
 
-  private createAvatar(data: AvatarData): Avatar {
-    // Check if avatar already exists
+  private setupGameLoop(): void {
+    this.app.ticker.add((ticker) => {
+      const deltaTime = ticker.deltaTime;
+
+      // 모든 아바타 업데이트 (이동 보간 + 애니메이션 전환)
+      this.avatars.forEach(avatar => avatar.update(deltaTime));
+    });
+  }
+
+  // Public API for creating entities
+
+  createAvatar(data: AvatarData): void {
     if (this.avatars.has(data.id)) {
-      console.warn(`Avatar with id ${data.id} already exists`);
-      return this.avatars.get(data.id)!;
+      console.warn(`[Game] Avatar ${data.id} already exists`);
+      return;
     }
 
     const avatar = new Avatar(data, this.gameContainer);
     this.avatars.set(data.id, avatar);
-    console.log(`Avatar created: ${data.id} at (${data.x}, ${data.y})`);
-    return avatar;
+    console.log(`[Game] Avatar created: ${data.id}`);
   }
 
-  private moveAvatar(avatarId: string, x: number, y: number): void {
-    const avatar = this.avatars.get(avatarId);
+  moveAvatar(id: string, x: number, y: number): void {
+    const avatar = this.avatars.get(id);
     if (avatar) {
       avatar.moveTo(x, y);
     } else {
-      console.warn(`Avatar ${avatarId} not found`);
+      console.warn(`[Game] Avatar not found: ${id}`);
     }
   }
 
-  private createObject(data: GameObjectData): GameObject {
-    // Check if object already exists
-    if (this.objects.has(data.id)) {
-      console.warn(`Object with id ${data.id} already exists`);
-      return this.objects.get(data.id)!;
-    }
-
-    const obj = new GameObject(data, this.gameContainer);
-    this.objects.set(data.id, obj);
-    console.log(`Object created: ${data.id} at (${data.x}, ${data.y})`);
-    return obj;
-  }
-
-  private pickupObject(avatarId: string, objectId: string): void {
-    const avatar = this.avatars.get(avatarId);
-    const object = this.objects.get(objectId);
-
-    if (avatar && object) {
-      avatar.pickupObject(objectId);
-      object.destroy();
-      this.objects.delete(objectId);
-      console.log(`Avatar ${avatarId} picked up object ${objectId}`);
-    } else {
-      console.warn(
-        `Failed to pickup: Avatar ${avatarId} or Object ${objectId} not found`
-      );
+  removeAvatar(id: string): void {
+    const avatar = this.avatars.get(id);
+    if (avatar) {
+      avatar.destroy();
+      this.avatars.delete(id);
+      console.log(`[Game] Avatar removed: ${id}`);
     }
   }
 
-  private update(deltaTime: number): void {
-    // Update all avatars
-    this.avatars.forEach((avatar) => {
-      avatar.update(deltaTime);
-    });
+  createObject(data: GameObjectData): void {
+    if (this.gameObjects.has(data.id)) {
+      console.warn(`[Game] Object ${data.id} already exists`);
+      return;
+    }
+
+    const gameObject = new GameObject(data, this.gameContainer);
+    this.gameObjects.set(data.id, gameObject);
+    console.log(`[Game] Object created: ${data.id}`);
   }
 
-  // Public API for testing without server
-  public testCreateAvatar(id: string, x: number, y: number): void {
-    this.createAvatar({ id, x, y });
+  async pickupObject(objectId: string, _avatarId: string): Promise<void> {
+    const gameObject = this.gameObjects.get(objectId);
+    if (gameObject) {
+      await gameObject.pickup();
+      gameObject.destroy();
+      this.gameObjects.delete(objectId);
+      console.log(`[Game] Object picked up: ${objectId}`);
+    }
   }
 
-  public testMoveAvatar(id: string, x: number, y: number): void {
+  removeObject(id: string): void {
+    const gameObject = this.gameObjects.get(id);
+    if (gameObject) {
+      gameObject.destroy();
+      this.gameObjects.delete(id);
+      console.log(`[Game] Object removed: ${id}`);
+    }
+  }
+
+  // Test methods for development
+
+  testCreateAvatar(id: string, x: number, y: number, spriteUrl?: string): void {
+    this.createAvatar({ id, x, y, spriteUrl });
+  }
+
+  testMoveAvatar(id: string, x: number, y: number): void {
     this.moveAvatar(id, x, y);
   }
 
-  public testCreateObject(
-    id: string,
-    x: number,
-    y: number,
-    type: string = "item"
-  ): void {
-    this.createObject({ id, x, y, type });
+  testCreateObject(id: string, x: number, y: number, spriteUrl?: string): void {
+    this.createObject({ id, x, y, spriteUrl });
   }
 
-  public testPickupObject(avatarId: string, objectId: string): void {
-    this.pickupObject(avatarId, objectId);
+  // Getters
+
+  getAvatar(id: string): Avatar | undefined {
+    return this.avatars.get(id);
   }
+
+  getObject(id: string): GameObject | undefined {
+    return this.gameObjects.get(id);
+  }
+
+  get canvas(): HTMLCanvasElement {
+    return this.app.canvas;
+  }
+
+  get stage(): Container {
+    return this.app.stage;
+  }
+
+  // Cleanup
 
   destroy(): void {
-    // Cleanup all avatars
-    this.avatars.forEach((avatar) => avatar.destroy());
-    this.avatars.clear();
-
-    // Cleanup all objects
-    this.objects.forEach((obj) => obj.destroy());
-    this.objects.clear();
-
-    // Cleanup admin panel and easter egg handler
-    if (this.adminPanel) {
-      this.adminPanel.destroy();
-      this.adminPanel = null;
-    }
-
-    if (this.easterEggHandler) {
-      this.easterEggHandler.destroy();
-      this.easterEggHandler = null;
-    }
-
-    // Disconnect WebSocket
     this.wsManager.disconnect();
 
-    // Destroy PixiJS application
-    this.app.destroy(true, {
-      children: true,
-      texture: true,
-      textureSource: true,
-    });
+    this.avatars.forEach(avatar => avatar.destroy());
+    this.avatars.clear();
+
+    this.gameObjects.forEach(obj => obj.destroy());
+    this.gameObjects.clear();
+
+    this.app.destroy(true);
+    console.log('[GameApplication] Destroyed');
   }
 }

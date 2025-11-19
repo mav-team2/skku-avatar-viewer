@@ -1,143 +1,115 @@
 export const MessageType = {
   AVATAR_CREATE: 'AVATAR_CREATE',
   AVATAR_MOVE: 'AVATAR_MOVE',
+  AVATAR_REMOVE: 'AVATAR_REMOVE',
   OBJECT_CREATE: 'OBJECT_CREATE',
   OBJECT_PICKUP: 'OBJECT_PICKUP',
+  NPC_SPAWN: 'NPC_SPAWN',
+  NPC_MOVE: 'NPC_MOVE',
+  WORLD_TIME: 'WORLD_TIME',
+  WORLD_WEATHER: 'WORLD_WEATHER',
 } as const;
 
 export type MessageType = typeof MessageType[keyof typeof MessageType];
 
-export interface GameMessage {
-  type: MessageType;
-  data: any;
-}
+type MessageHandler = (payload: unknown) => void;
 
 export class WebSocketManager {
   private ws: WebSocket | null = null;
-  private serverUrl: string;
-  private messageHandlers: Map<MessageType, Set<(data: any) => void>> = new Map();
-  private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 5;
-  private reconnectDelay: number = 3000;
-  private isConnecting: boolean = false;
+  private handlers: Map<MessageType, Set<MessageHandler>> = new Map();
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 3000;
+  private isConnecting = false;
+  private url: string;
 
-  constructor(serverUrl: string) {
-    this.serverUrl = serverUrl;
+  constructor(url: string) {
+    this.url = url;
   }
 
-  connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        resolve();
-        return;
-      }
+  connect(): void {
+    if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.OPEN)) {
+      return;
+    }
 
-      if (this.isConnecting) {
-        reject(new Error('Connection already in progress'));
-        return;
-      }
+    this.isConnecting = true;
 
-      this.isConnecting = true;
+    try {
+      this.ws = new WebSocket(this.url);
 
-      try {
-        this.ws = new WebSocket(this.serverUrl);
-
-        this.ws.onopen = () => {
-          console.log('WebSocket connected');
-          this.isConnecting = false;
-          this.reconnectAttempts = 0;
-          resolve();
-        };
-
-        this.ws.onmessage = (event) => {
-          this.handleMessage(event.data);
-        };
-
-        this.ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          this.isConnecting = false;
-          reject(error);
-        };
-
-        this.ws.onclose = () => {
-          console.log('WebSocket closed');
-          this.isConnecting = false;
-          this.attemptReconnect();
-        };
-      } catch (error) {
+      this.ws.onopen = () => {
+        console.log('[WebSocket] Connected');
+        this.reconnectAttempts = 0;
         this.isConnecting = false;
-        reject(error);
-      }
-    });
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data as string) as { type: MessageType; payload: unknown };
+          this.dispatch(message.type, message.payload);
+        } catch (error) {
+          console.error('[WebSocket] Parse error:', error);
+        }
+      };
+
+      this.ws.onclose = () => {
+        console.log('[WebSocket] Disconnected');
+        this.isConnecting = false;
+        this.attemptReconnect();
+      };
+
+      this.ws.onerror = (error) => {
+        console.error('[WebSocket] Error:', error);
+        this.isConnecting = false;
+      };
+    } catch (error) {
+      console.error('[WebSocket] Connection error:', error);
+      this.isConnecting = false;
+      this.attemptReconnect();
+    }
   }
 
   private attemptReconnect(): void {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++;
-      console.log(`Reconnecting... Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
-
-      setTimeout(() => {
-        this.connect().catch((error) => {
-          console.error('Reconnection failed:', error);
-        });
-      }, this.reconnectDelay);
-    } else {
-      console.error('Max reconnection attempts reached');
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('[WebSocket] Max reconnection attempts reached');
+      return;
     }
+
+    this.reconnectAttempts++;
+    console.log(`[WebSocket] Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
+    setTimeout(() => this.connect(), this.reconnectDelay);
   }
 
-  private async handleMessage(data: ArrayBuffer | string): Promise<void> {
-    try {
-      let message: GameMessage;
-
-      if (data instanceof ArrayBuffer) {
-        // Decode protobuf message
-        // This is a placeholder - you'll need to define your actual protobuf schema
-        const uint8Array = new Uint8Array(data);
-        message = await this.decodeProtobufMessage(uint8Array);
-      } else {
-        // Handle JSON fallback
-        message = JSON.parse(data);
-      }
-
-      // Dispatch to registered handlers
-      const handlers = this.messageHandlers.get(message.type);
-      if (handlers) {
-        handlers.forEach((handler) => handler(message.data));
-      }
-    } catch (error) {
-      console.error('Error handling message:', error);
+  on(type: MessageType, handler: MessageHandler): void {
+    if (!this.handlers.has(type)) {
+      this.handlers.set(type, new Set());
     }
+    this.handlers.get(type)!.add(handler);
   }
 
-  private async decodeProtobufMessage(data: Uint8Array): Promise<GameMessage> {
-    // Placeholder for protobuf decoding
-    // You'll need to replace this with your actual protobuf schema
-    // For now, we'll use JSON as a fallback
-    const jsonString = new TextDecoder().decode(data);
-    return JSON.parse(jsonString);
+  off(type: MessageType, handler: MessageHandler): void {
+    this.handlers.get(type)?.delete(handler);
   }
 
-  on(messageType: MessageType, handler: (data: any) => void): void {
-    if (!this.messageHandlers.has(messageType)) {
-      this.messageHandlers.set(messageType, new Set());
-    }
-    this.messageHandlers.get(messageType)!.add(handler);
-  }
-
-  off(messageType: MessageType, handler: (data: any) => void): void {
-    const handlers = this.messageHandlers.get(messageType);
+  private dispatch(type: MessageType, payload: unknown): void {
+    const handlers = this.handlers.get(type);
     if (handlers) {
-      handlers.delete(handler);
+      handlers.forEach(handler => {
+        try {
+          handler(payload);
+        } catch (error) {
+          console.error(`[WebSocket] Handler error for ${type}:`, error);
+        }
+      });
     }
   }
 
-  send(message: GameMessage): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      // For now, send as JSON. Replace with protobuf encoding later
-      this.ws.send(JSON.stringify(message));
+  send(type: MessageType, payload: unknown): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type, payload }));
     } else {
-      console.error('WebSocket is not open. Current state:', this.ws?.readyState);
+      console.warn('[WebSocket] Cannot send message - not connected');
     }
   }
 
@@ -146,9 +118,10 @@ export class WebSocketManager {
       this.ws.close();
       this.ws = null;
     }
+    this.reconnectAttempts = this.maxReconnectAttempts; // Prevent reconnection
   }
 
-  isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+  get isConnected(): boolean {
+    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
   }
 }

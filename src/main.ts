@@ -1,41 +1,75 @@
 import { GameApplication } from './core/GameApplication';
+import { AdminPanel } from './ui/AdminPanel';
+import { easterEggHandler } from './utils/EasterEggHandler';
 
-// Configuration - change this to your game server URL
+// Configuration
 const GAME_SERVER_URL = 'ws://localhost:8080';
 
-// Initialize game application
-const game = new GameApplication(GAME_SERVER_URL);
+async function main(): Promise<void> {
+  console.log('🎮 SKKU Avatar Viewer Starting...');
 
-game.init().then(() => {
-  console.log('Game initialized successfully');
+  // Create game application
+  const game = new GameApplication(GAME_SERVER_URL);
 
-  // For testing purposes, you can create test avatars and objects
-  // Remove these lines when connecting to a real game server
+  // Initialize the game
+  await game.init(document.body);
+
+  // Create admin panel
+  const adminPanel = new AdminPanel(game);
+
+  // Setup easter egg to toggle admin panel
+  easterEggHandler.onTrigger('admin-panel', () => {
+    adminPanel.toggle();
+  });
+
+  // Development mode: create test entities
   if (import.meta.env.DEV) {
-    // Test avatar creation
-    setTimeout(() => {
-      game.testCreateAvatar('player1', window.innerWidth / 2, window.innerHeight / 2);
-      game.testCreateObject('item1', 200, 200, 'coin');
-      game.testCreateObject('item2', 400, 300, 'gem');
-    }, 1000);
+    console.log('🔧 Development mode enabled');
 
-    // Test avatar movement
+    // Create a test avatar
     setTimeout(() => {
-      game.testMoveAvatar('player1', 200, 200);
+      game.testCreateAvatar('player1', 200, 300);
+      console.log('[Dev] Test avatar created');
+    }, 500);
+
+    // Move the test avatar after a delay
+    setTimeout(() => {
+      game.testMoveAvatar('player1', 500, 400);
+      console.log('[Dev] Test avatar moving');
     }, 2000);
 
-    // Test object pickup
+    // Create a test object
     setTimeout(() => {
-      game.testPickupObject('player1', 'item1');
-    }, 4000);
-  }
-}).catch((error) => {
-  console.error('Failed to initialize game:', error);
-});
+      game.testCreateObject('coin1', 400, 350);
+      console.log('[Dev] Test object created');
+    }, 1000);
 
-// Hot Module Replacement
-if (import.meta.hot) {
-  import.meta.hot.dispose(() => {
+    // Create another avatar
+    setTimeout(() => {
+      game.testCreateAvatar('player2', 600, 200);
+      console.log('[Dev] Second test avatar created');
+    }, 1500);
+
+    // Move second avatar
+    setTimeout(() => {
+      game.testMoveAvatar('player2', 300, 450);
+      console.log('[Dev] Second test avatar moving');
+    }, 3000);
+
+    // Log hint for admin panel
+    console.log('💡 Hint: Press Z and click 3 times to open admin panel');
+  }
+
+  // Handle cleanup on page unload
+  window.addEventListener('beforeunload', () => {
+    adminPanel.destroy();
     game.destroy();
   });
+
+  console.log('✅ SKKU Avatar Viewer Ready');
 }
+
+// Start the application
+main().catch((error) => {
+  console.error('❌ Failed to start application:', error);
+});

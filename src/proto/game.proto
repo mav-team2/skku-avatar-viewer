@@ -2,59 +2,77 @@ syntax = "proto3";
 
 package game;
 
-// Message types
-enum MessageType {
-  AVATAR_CREATE = 0;
-  AVATAR_MOVE = 1;
-  OBJECT_CREATE = 2;
-  OBJECT_PICKUP = 3;
-}
-
-// Avatar data
-message AvatarData {
+// Avatar related messages
+message AvatarCreate {
   string id = 1;
   float x = 2;
   float y = 3;
   string name = 4;
-  optional Velocity velocity = 5;
-  optional string spriteUrl = 6; // Base URL for sprite assets (e.g., www.domain.com/avatar_id)
+  string sprite_url = 5;
 }
 
-// Velocity
-message Velocity {
-  float x = 1;
-  float y = 2;
+message AvatarMove {
+  string id = 1;
+  float x = 2;
+  float y = 3;
 }
 
-// Object data
-message GameObjectData {
+message AvatarRemove {
+  string id = 1;
+}
+
+// Object related messages
+message ObjectCreate {
   string id = 1;
   float x = 2;
   float y = 3;
   string type = 4;
-  optional string spriteUrl = 5; // URL for object sprite
+  string sprite_url = 5;
 }
 
-// Movement data
-message MovementData {
+message ObjectPickup {
+  string object_id = 1;
+  string avatar_id = 2;
+}
+
+// NPC related messages
+message NpcSpawn {
+  string id = 1;
+  float x = 2;
+  float y = 3;
+  string npc_type = 4;
+  string sprite_url = 5;
+}
+
+message NpcMove {
   string id = 1;
   float x = 2;
   float y = 3;
 }
 
-// Pickup data
-message PickupData {
-  string avatarId = 1;
-  string objectId = 2;
+// World related messages
+message WorldTime {
+  int32 hour = 1;
+  int32 minute = 2;
 }
 
-// Game message wrapper
+message WorldWeather {
+  string weather_type = 1;
+  float intensity = 2;
+}
+
+// Generic game message wrapper
 message GameMessage {
-  MessageType type = 1;
+  string type = 1;
   oneof payload {
-    AvatarData avatarData = 2;
-    GameObjectData objectData = 3;
-    MovementData movementData = 4;
-    PickupData pickupData = 5;
+    AvatarCreate avatar_create = 2;
+    AvatarMove avatar_move = 3;
+    AvatarRemove avatar_remove = 4;
+    ObjectCreate object_create = 5;
+    ObjectPickup object_pickup = 6;
+    NpcSpawn npc_spawn = 7;
+    NpcMove npc_move = 8;
+    WorldTime world_time = 9;
+    WorldWeather world_weather = 10;
   }
 }
