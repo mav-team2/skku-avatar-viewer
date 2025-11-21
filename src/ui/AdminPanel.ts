@@ -197,7 +197,7 @@ export class AdminPanel {
     document.getElementById('create-avatar')?.addEventListener('click', () => {
       const x = parseInt((document.getElementById('avatar-x') as HTMLInputElement).value) || 400;
       const y = parseInt((document.getElementById('avatar-y') as HTMLInputElement).value) || 300;
-      const spriteUrl = (document.getElementById('avatar-sprite') as HTMLInputElement).value || undefined;
+      const spriteUrl = (document.getElementById('avatar-sprite') as HTMLInputElement).value || '/assets/avatars/default';
 
       const id = `avatar_${this.avatarCount++}`;
       this.game.testCreateAvatar(id, x, y, spriteUrl);

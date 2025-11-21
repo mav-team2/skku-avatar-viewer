@@ -3,7 +3,7 @@ import { AdminPanel } from './ui/AdminPanel';
 import { easterEggHandler } from './utils/EasterEggHandler';
 
 // Configuration
-const GAME_SERVER_URL = 'ws://localhost:8080';
+const GAME_SERVER_URL = import.meta.env.VITE_GAME_SERVER_URL || 'ws://localhost:8080';
 
 async function main(): Promise<void> {
   console.log('🎮 SKKU Avatar Viewer Starting...');
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
 
     // Create a test avatar
     setTimeout(() => {
-      game.testCreateAvatar('player1', 200, 300);
+      game.testCreateAvatar('player1', 200, 300, '/assets/avatars/default');
       console.log('[Dev] Test avatar created');
     }, 500);
 
@@ -46,7 +46,7 @@ async function main(): Promise<void> {
 
     // Create another avatar
     setTimeout(() => {
-      game.testCreateAvatar('player2', 600, 200);
+      game.testCreateAvatar('player2', 600, 200, '/assets/avatars/default');
       console.log('[Dev] Second test avatar created');
     }, 1500);
 

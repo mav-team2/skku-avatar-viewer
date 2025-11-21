@@ -1,7 +1,8 @@
 import { Application, Container } from 'pixi.js';
 import { Avatar, type AvatarData } from '../entities/Avatar';
 import { GameObject, type GameObjectData } from '../entities/GameObject';
-import { WebSocketManager, MessageType } from '../network/WebSocketManager';
+import { WebSocketManager } from '../network/WebSocketManager';
+import { protobufHandler, MessageType, type MessagePayload } from '../proto/ProtobufHandler';
 import { BackgroundManager } from '../utils/BackgroundManager';
 
 export class GameApplication {
@@ -42,39 +43,46 @@ export class GameApplication {
     // WebSocket 연결
     this.wsManager.connect();
 
+    // Initialize Protobuf
+    await protobufHandler.initialize();
+
     console.log('[GameApplication] Initialized');
   }
 
   private setupWebSocketHandlers(): void {
-    // 아바타 생성 - spriteUrl에서 스프라이트 다운로드
-    this.wsManager.on(MessageType.AVATAR_CREATE, (payload) => {
-      const data = payload as AvatarData;
-      this.createAvatar(data);
+    this.wsManager.onMessage((data: ArrayBuffer) => {
+      try {
+        const decoded = protobufHandler.decode(new Uint8Array(data));
+        this.handleGameMessage(decoded.type, decoded.payload);
+      } catch (error) {
+        console.error('[Game] Failed to decode message:', error);
+      }
     });
+  }
 
-    // 아바타 이동
-    this.wsManager.on(MessageType.AVATAR_MOVE, (payload) => {
-      const { id, x, y } = payload as { id: string; x: number; y: number };
-      this.moveAvatar(id, x, y);
-    });
-
-    // 아바타 제거
-    this.wsManager.on(MessageType.AVATAR_REMOVE, (payload) => {
-      const { id } = payload as { id: string };
-      this.removeAvatar(id);
-    });
-
-    // 오브젝트 생성
-    this.wsManager.on(MessageType.OBJECT_CREATE, (payload) => {
-      const data = payload as GameObjectData;
-      this.createObject(data);
-    });
-
-    // 오브젝트 픽업
-    this.wsManager.on(MessageType.OBJECT_PICKUP, (payload) => {
-      const { objectId, avatarId } = payload as { objectId: string; avatarId: string };
-      this.pickupObject(objectId, avatarId);
-    });
+  private handleGameMessage(type: MessageType, payload: MessagePayload): void {
+    switch (type) {
+      case MessageType.AVATAR_CREATE:
+        this.createAvatar(payload as AvatarData);
+        break;
+      case MessageType.AVATAR_MOVE:
+        const moveData = payload as { id: string; x: number; y: number };
+        this.moveAvatar(moveData.id, moveData.x, moveData.y);
+        break;
+      case MessageType.AVATAR_REMOVE:
+        const removeData = payload as { id: string };
+        this.removeAvatar(removeData.id);
+        break;
+      case MessageType.OBJECT_CREATE:
+        this.createObject(payload as GameObjectData);
+        break;
+      case MessageType.OBJECT_PICKUP:
+        const pickupData = payload as { objectId: string; avatarId: string };
+        this.pickupObject(pickupData.objectId, pickupData.avatarId);
+        break;
+      default:
+        console.warn(`[Game] Unhandled message type: ${type}`);
+    }
   }
 
   private setupGameLoop(): void {

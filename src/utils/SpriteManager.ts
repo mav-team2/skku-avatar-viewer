@@ -1,11 +1,11 @@
-import { Assets, Texture } from 'pixi.js';
+import { Assets, Texture, Rectangle } from 'pixi.js';
 
 export type SpriteAction = 'stand' | 'walk' | 'run';
 
 export interface SpriteSet {
-  stand?: Texture;
-  walk?: Texture;
-  run?: Texture;
+  stand?: Texture[];
+  walk?: Texture[];
+  run?: Texture[];
 }
 
 class SpriteManager {
@@ -73,10 +73,32 @@ class SpriteManager {
       const url = this.buildSpriteUrl(baseUrl, action);
       try {
         const texture = await Assets.load(url);
-        spriteSet[action] = texture;
-        console.log(`[SpriteManager] Loaded: ${url}`);
+        
+        // 텍스처를 프레임으로 분할 (여기서는 간단히 가로 스트립 가정)
+        // 실제로는 메타데이터나 규칙이 필요할 수 있음
+        // 현재 규칙: 
+        // - stand: 1프레임 (32x48)
+        // - walk: 3프레임 (96x48 -> 32x48 * 3)
+        
+        const frameWidth = 32;
+        const frameHeight = 48;
+        const frames: Texture[] = [];
+        
+        const cols = Math.floor(texture.width / frameWidth);
+        
+        for (let i = 0; i < cols; i++) {
+          const rect = new Rectangle(i * frameWidth, 0, frameWidth, frameHeight);
+          const frame = new Texture({
+            source: texture.source,
+            frame: rect
+          });
+          frames.push(frame);
+        }
+        
+        spriteSet[action] = frames;
+        console.log(`[SpriteManager] Loaded ${action}: ${url} (${frames.length} frames)`);
       } catch (error) {
-        console.warn(`[SpriteManager] Failed to load ${action}: ${url}`);
+        // console.warn(`[SpriteManager] Failed to load ${action}: ${url}`);
         // 개별 액션 실패는 허용 (fallback 사용)
       }
     });
@@ -87,6 +109,10 @@ class SpriteManager {
 
   private buildSpriteUrl(baseUrl: string, action: SpriteAction): string {
     const normalizedUrl = this.normalizeUrl(baseUrl);
+    // 로컬 에셋인 경우 확장자 .png 추가 (임시)
+    if (normalizedUrl.includes('assets/avatars')) {
+      return `${normalizedUrl}/${action}.png`;
+    }
     return `${normalizedUrl}/${action}`;
   }
 
@@ -94,15 +120,15 @@ class SpriteManager {
     // 끝 슬래시 제거
     let normalized = url.replace(/\/$/, '');
 
-    // 프로토콜이 없으면 https:// 추가
-    if (!normalized.startsWith('http')) {
+    // 프로토콜이 없으면 https:// 추가 (로컬 경로 제외)
+    if (!normalized.startsWith('http') && !normalized.startsWith('/')) {
       normalized = `https://${normalized}`;
     }
 
     return normalized;
   }
 
-  getActionTexture(spriteSet: SpriteSet, action: SpriteAction): Texture | null {
+  getActionTextures(spriteSet: SpriteSet, action: SpriteAction): Texture[] | null {
     return spriteSet[action] ?? null;
   }
 

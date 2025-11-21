@@ -1,5 +1,18 @@
 import protobuf from 'protobufjs';
-import { MessageType } from '../network/WebSocketManager';
+
+export const MessageType = {
+  AVATAR_CREATE: 'AVATAR_CREATE',
+  AVATAR_MOVE: 'AVATAR_MOVE',
+  AVATAR_REMOVE: 'AVATAR_REMOVE',
+  OBJECT_CREATE: 'OBJECT_CREATE',
+  OBJECT_PICKUP: 'OBJECT_PICKUP',
+  NPC_SPAWN: 'NPC_SPAWN',
+  NPC_MOVE: 'NPC_MOVE',
+  WORLD_TIME: 'WORLD_TIME',
+  WORLD_WEATHER: 'WORLD_WEATHER',
+} as const;
+
+export type MessageType = typeof MessageType[keyof typeof MessageType];
 
 // Type definitions for protobuf messages
 interface AvatarCreatePayload {

@@ -1,22 +1,8 @@
-export const MessageType = {
-  AVATAR_CREATE: 'AVATAR_CREATE',
-  AVATAR_MOVE: 'AVATAR_MOVE',
-  AVATAR_REMOVE: 'AVATAR_REMOVE',
-  OBJECT_CREATE: 'OBJECT_CREATE',
-  OBJECT_PICKUP: 'OBJECT_PICKUP',
-  NPC_SPAWN: 'NPC_SPAWN',
-  NPC_MOVE: 'NPC_MOVE',
-  WORLD_TIME: 'WORLD_TIME',
-  WORLD_WEATHER: 'WORLD_WEATHER',
-} as const;
-
-export type MessageType = typeof MessageType[keyof typeof MessageType];
-
-type MessageHandler = (payload: unknown) => void;
+export type MessageHandler = (data: ArrayBuffer) => void;
 
 export class WebSocketManager {
   private ws: WebSocket | null = null;
-  private handlers: Map<MessageType, Set<MessageHandler>> = new Map();
+  private messageHandlers: Set<MessageHandler> = new Set();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 3000;
@@ -36,6 +22,7 @@ export class WebSocketManager {
 
     try {
       this.ws = new WebSocket(this.url);
+      this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = () => {
         console.log('[WebSocket] Connected');
@@ -44,11 +31,10 @@ export class WebSocketManager {
       };
 
       this.ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data as string) as { type: MessageType; payload: unknown };
-          this.dispatch(message.type, message.payload);
-        } catch (error) {
-          console.error('[WebSocket] Parse error:', error);
+        if (event.data instanceof ArrayBuffer) {
+          this.dispatch(event.data);
+        } else {
+          console.warn('[WebSocket] Received non-binary message');
         }
       };
 
@@ -81,33 +67,27 @@ export class WebSocketManager {
     setTimeout(() => this.connect(), this.reconnectDelay);
   }
 
-  on(type: MessageType, handler: MessageHandler): void {
-    if (!this.handlers.has(type)) {
-      this.handlers.set(type, new Set());
-    }
-    this.handlers.get(type)!.add(handler);
+  onMessage(handler: MessageHandler): void {
+    this.messageHandlers.add(handler);
   }
 
-  off(type: MessageType, handler: MessageHandler): void {
-    this.handlers.get(type)?.delete(handler);
+  offMessage(handler: MessageHandler): void {
+    this.messageHandlers.delete(handler);
   }
 
-  private dispatch(type: MessageType, payload: unknown): void {
-    const handlers = this.handlers.get(type);
-    if (handlers) {
-      handlers.forEach(handler => {
-        try {
-          handler(payload);
-        } catch (error) {
-          console.error(`[WebSocket] Handler error for ${type}:`, error);
-        }
-      });
-    }
+  private dispatch(data: ArrayBuffer): void {
+    this.messageHandlers.forEach(handler => {
+      try {
+        handler(data);
+      } catch (error) {
+        console.error('[WebSocket] Handler error:', error);
+      }
+    });
   }
 
-  send(type: MessageType, payload: unknown): void {
+  send(data: ArrayBuffer): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type, payload }));
+      this.ws.send(data);
     } else {
       console.warn('[WebSocket] Cannot send message - not connected');
     }

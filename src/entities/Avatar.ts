@@ -1,4 +1,4 @@
-import { Container, Sprite, Texture, Graphics } from 'pixi.js';
+import { Container, AnimatedSprite, Texture } from 'pixi.js';
 import { spriteManager, type SpriteSet, type SpriteAction } from '../utils/SpriteManager';
 
 export interface AvatarData {
@@ -13,7 +13,7 @@ export class Avatar {
   public readonly id: string;
   public readonly container: Container;
 
-  private sprite: Sprite;
+  private sprite: AnimatedSprite;
   private spriteSet: SpriteSet | null = null;
   private currentAction: SpriteAction = 'stand';
 
@@ -57,21 +57,20 @@ export class Avatar {
     // 스프라이트 URL이 있으면 로드
     if (data.spriteUrl) {
       this.loadSprites(data.spriteUrl);
+    } else {
+      // 테스트용 기본 아바타 로드
+      this.loadSprites('/assets/avatars/default');
     }
   }
 
-  private createDefaultSprite(): Sprite {
-    const graphics = new Graphics();
-    graphics.rect(-16, -48, 32, 48);
-    graphics.fill(0xff6b6b);  // 빨간색 아바타
-
-    // Graphics를 Sprite로 변환하기 위해 임시 텍스처 사용
-    const sprite = new Sprite(Texture.WHITE);
+  private createDefaultSprite(): AnimatedSprite {
+    // 임시 텍스처 생성
+    const sprite = new AnimatedSprite([Texture.WHITE]);
     sprite.width = 32;
     sprite.height = 48;
     sprite.anchor.set(0.5, 1);
     sprite.tint = 0xff6b6b;
-
+    
     return sprite;
   }
 
@@ -84,9 +83,9 @@ export class Avatar {
       this.spriteSet = await spriteManager.loadSpriteSet(baseUrl);
 
       // stand 텍스처로 초기화
-      const standTexture = spriteManager.getActionTexture(this.spriteSet, 'stand');
-      if (standTexture) {
-        this.updateTexture(standTexture);
+      const standTextures = spriteManager.getActionTextures(this.spriteSet, 'stand');
+      if (standTextures && standTextures.length > 0) {
+        this.playAnimation('stand');
       }
 
       console.log(`[Avatar] Sprites loaded for ${this.id}`);
@@ -162,26 +161,41 @@ export class Avatar {
    */
   setAction(action: SpriteAction): void {
     if (this.currentAction === action) return;
-    if (!this.spriteSet) {
-      this.currentAction = action;
-      return;
-    }
-
-    const texture = spriteManager.getActionTexture(this.spriteSet, action);
-    if (texture) {
-      this.currentAction = action;
-      this.updateTexture(texture);
-      console.log(`[Avatar ${this.id}] Action: ${action}`);
-    }
+    
+    this.currentAction = action;
+    this.playAnimation(action);
   }
 
-  private updateTexture(texture: Texture): void {
-    const previousScale = { x: this.sprite.scale.x, y: this.sprite.scale.y };
-    this.sprite.texture = texture;
-    this.sprite.scale.set(previousScale.x, previousScale.y);
-    // 실제 텍스처 크기에 맞춰 리셋
-    this.sprite.width = texture.width;
-    this.sprite.height = texture.height;
+  private playAnimation(action: SpriteAction): void {
+    if (!this.spriteSet) return;
+
+    const textures = spriteManager.getActionTextures(this.spriteSet, action);
+    if (textures && textures.length > 0) {
+      // 텍스처 교체
+      this.sprite.textures = textures;
+      
+      // 애니메이션 속도 설정
+      if (action === 'walk') {
+        this.sprite.animationSpeed = 0.15;
+        this.sprite.play();
+      } else if (action === 'run') {
+        this.sprite.animationSpeed = 0.25;
+        this.sprite.play();
+      } else {
+        // stand
+        this.sprite.animationSpeed = 0.05;
+        this.sprite.play();
+      }
+      
+      // 틴트 제거 (기본 스프라이트가 틴트되어 있었을 수 있음)
+      this.sprite.tint = 0xffffff;
+      
+      // 크기 조정 (첫 번째 프레임 기준)
+      // this.sprite.width = textures[0].width;
+      // this.sprite.height = textures[0].height;
+      
+      console.log(`[Avatar ${this.id}] Playing animation: ${action}`);
+    }
   }
 
   /**
