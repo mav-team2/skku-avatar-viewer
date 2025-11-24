@@ -88,15 +88,19 @@ export class GameApplication {
 
   // Public API for creating entities
 
-  createAvatar(data: AvatarData): void {
+  async createAvatar(data: AvatarData): Promise<void> {
     if (this.avatars.has(data.id)) {
       console.warn(`[Game] Avatar ${data.id} already exists`);
       return;
     }
 
-    const avatar = new Avatar(data, this.gameContainer);
-    this.avatars.set(data.id, avatar);
-    console.log(`[Game] Avatar created: ${data.id}`);
+    try {
+      const avatar = await Avatar.create(data, this.gameContainer);
+      this.avatars.set(data.id, avatar);
+      console.log(`[Game] Avatar created: ${data.id}`);
+    } catch (error) {
+      console.error(`[Game] Failed to create avatar ${data.id}:`, error);
+    }
   }
 
   moveAvatar(id: string, x: number, y: number): void {
@@ -117,15 +121,19 @@ export class GameApplication {
     }
   }
 
-  createObject(data: GameObjectData): void {
+  async createObject(data: GameObjectData): Promise<void> {
     if (this.gameObjects.has(data.id)) {
       console.warn(`[Game] Object ${data.id} already exists`);
       return;
     }
 
-    const gameObject = new GameObject(data, this.gameContainer);
-    this.gameObjects.set(data.id, gameObject);
-    console.log(`[Game] Object created: ${data.id}`);
+    try {
+      const gameObject = await GameObject.create(data, this.gameContainer);
+      this.gameObjects.set(data.id, gameObject);
+      console.log(`[Game] Object created: ${data.id}`);
+    } catch (error) {
+      console.error(`[Game] Failed to create object ${data.id}:`, error);
+    }
   }
 
   async pickupObject(objectId: string, _avatarId: string): Promise<void> {
@@ -150,7 +158,7 @@ export class GameApplication {
   // Test methods for development
 
   testCreateAvatar(id: string, x: number, y: number, spriteUrl?: string): void {
-    this.createAvatar({ id, x, y, spriteUrl });
+    this.createAvatar({ id, x, y, spriteUrl});
   }
 
   testMoveAvatar(id: string, x: number, y: number): void {

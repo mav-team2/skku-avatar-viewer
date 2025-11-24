@@ -7,40 +7,58 @@ export interface GameObjectData {
   y: number;
   type?: string;
   spriteUrl?: string;  // 전체 URL (예: www.domain.com/objects/coin.png)
+  scale?: number;      // 스프라이트 스케일 (기본값: 1.0)
+  rotation?: number;   // 회전 각도 (라디안, 기본값: 0)
 }
 
 export class GameObject {
   public readonly id: string;
   public readonly container: Container;
 
-  private sprite: Sprite;
+  private sprite!: Sprite; // definite assignment assertion
   private objectType: string;
   private gameContainer: Container;
+  private readonly objectScale: number; // 오브젝트 스케일
+  private objectRotation: number; // 오브젝트 회전 각도 (라디안)
 
-  constructor(
+  private constructor(
     data: GameObjectData,
     gameContainer: Container
   ) {
     this.gameContainer = gameContainer;
     this.id = data.id;
     this.objectType = data.type ?? 'default';
+    this.objectScale = data.scale ?? 1.0; // 기본 스케일 1.0배
+    this.objectRotation = data.rotation ?? 0; // 기본 회전 0
 
     // Container 생성
     this.container = new Container();
     this.container.x = data.x;
     this.container.y = data.y;
 
-    // 기본 스프라이트 (플레이스홀더)
-    this.sprite = this.createDefaultSprite();
-    this.container.addChild(this.sprite);
-
     // 게임 컨테이너에 추가
     this.gameContainer.addChild(this.container);
+  }
 
-    // 스프라이트 URL이 있으면 로드
+  /**
+   * 정적 팩토리 메서드 - 스프라이트 로드 후 오브젝트 생성
+   */
+  static async create(
+    data: GameObjectData,
+    gameContainer: Container
+  ): Promise<GameObject> {
+    const gameObject = new GameObject(data, gameContainer);
+
+    // 스프라이트 URL이 있으면 먼저 로드
     if (data.spriteUrl) {
-      this.loadSprite(data.spriteUrl);
+      await gameObject.loadSprite(data.spriteUrl);
+    } else {
+      // 기본 플레이스홀더 생성
+      gameObject.sprite = gameObject.createDefaultSprite();
+      gameObject.container.addChild(gameObject.sprite);
     }
+
+    return gameObject;
   }
 
   private createDefaultSprite(): Sprite {
@@ -58,22 +76,27 @@ export class GameObject {
    * 스프라이트 로드
    * @param url - 전체 URL (예: www.domain.com/objects/coin.png)
    */
-  async loadSprite(url: string): Promise<void> {
+  private async loadSprite(url: string): Promise<void> {
     try {
       const texture = await spriteManager.loadTexture(url);
       if (texture) {
-        this.updateTexture(texture);
-        console.log(`[GameObject] Sprite loaded for ${this.id}`);
+        // 스프라이트 생성 및 매트릭스 변환 직접 적용
+        this.sprite = new Sprite(texture);
+        this.sprite.anchor.set(0.5, 1);
+
+        // 스케일 적용
+        this.sprite.scale.set(this.objectScale, this.objectScale);
+
+        // 회전 적용 (라디안)
+        this.sprite.rotation = this.objectRotation;
+
+        this.container.addChild(this.sprite);
+        console.log(`[GameObject ${this.id}] Sprite loaded: ${texture.width}x${texture.height}, scale: ${this.objectScale}, rotation: ${this.objectRotation.toFixed(2)} rad`);
       }
     } catch (error) {
       console.error(`[GameObject] Failed to load sprite: ${error}`);
+      throw error;
     }
-  }
-
-  private updateTexture(texture: Texture): void {
-    this.sprite.texture = texture;
-    this.sprite.width = texture.width;
-    this.sprite.height = texture.height;
   }
 
   /**
@@ -82,6 +105,24 @@ export class GameObject {
   setPosition(x: number, y: number): void {
     this.container.x = x;
     this.container.y = y;
+  }
+
+  /**
+   * 회전 설정 (라디안)
+   */
+  setRotation(rotation: number): void {
+    this.objectRotation = rotation;
+    if (this.sprite) {
+      this.sprite.rotation = rotation;
+    }
+  }
+
+  /**
+   * 회전 설정 (도)
+   */
+  setRotationDegrees(degrees: number): void {
+    const radians = (degrees * Math.PI) / 180;
+    this.setRotation(radians);
   }
 
   /**
@@ -110,4 +151,6 @@ export class GameObject {
   get x(): number { return this.container.x; }
   get y(): number { return this.container.y; }
   get type(): string { return this.objectType; }
+  get rotation(): number { return this.objectRotation; }
+  get rotationDegrees(): number { return (this.objectRotation * 180) / Math.PI; }
 }
