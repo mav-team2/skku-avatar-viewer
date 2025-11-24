@@ -3,7 +3,6 @@ import { Avatar, type AvatarData } from '../entities/Avatar';
 import { GameObject, type GameObjectData } from '../entities/GameObject';
 import { WebSocketManager } from '../network/WebSocketManager';
 import { protobufHandler, MessageType, type MessagePayload } from '../proto/ProtobufHandler';
-import { BackgroundManager } from '../utils/BackgroundManager';
 
 export class GameApplication {
   private app: Application;
@@ -11,31 +10,22 @@ export class GameApplication {
   private avatars: Map<string, Avatar> = new Map();
   private gameObjects: Map<string, GameObject> = new Map();
   private wsManager: WebSocketManager;
-  private backgroundManager: BackgroundManager;
 
   constructor(wsUrl: string) {
     this.app = new Application();
     this.gameContainer = new Container();
     this.wsManager = new WebSocketManager(wsUrl);
-    this.backgroundManager = new BackgroundManager();
   }
 
   async init(container: HTMLElement): Promise<void> {
     await this.app.init({
       resizeTo: window,
-      backgroundColor: 0x1a1a2e,
+      backgroundAlpha: 0,
       antialias: true,
     });
 
     container.appendChild(this.app.canvas);
     this.app.stage.addChild(this.gameContainer);
-
-    // Initialize background (WebRTC or static image)
-    await this.backgroundManager.initialize(
-      this.gameContainer,
-      this.app.screen.width,
-      this.app.screen.height
-    );
 
     this.setupWebSocketHandlers();
     this.setupGameLoop();
@@ -88,9 +78,6 @@ export class GameApplication {
   private setupGameLoop(): void {
     this.app.ticker.add((ticker) => {
       const deltaTime = ticker.deltaTime;
-
-      // Update background (for WebRTC video texture)
-      this.backgroundManager.update();
 
       // 모든 아바타 업데이트 (이동 보간 + 애니메이션 전환)
       this.avatars.forEach(avatar => avatar.update(deltaTime));
@@ -201,7 +188,6 @@ export class GameApplication {
     this.gameObjects.forEach(obj => obj.destroy());
     this.gameObjects.clear();
 
-    this.backgroundManager.destroy();
     this.app.destroy(true);
     console.log('[GameApplication] Destroyed');
   }

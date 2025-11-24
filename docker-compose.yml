@@ -1,0 +1,32 @@
+services:
+  streaming:
+    build:
+      context: .
+      dockerfile: run/DockerFile.ffmpeg
+    image: video-test-streaming:latest
+    container_name: video-test-streaming
+    depends_on:
+      - mediamtx
+    restart: unless-stopped
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: mediamtx
+    volumes:
+      - ./run/configs/mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      - "8554:8554"      # RTSP
+      - "1935:1935"      # RTMP
+      - "8888:8888"      # HLS (HTTP)
+      - "8889:8889"      # WebRTC (WHEP/WHIP signaling HTTP)
+      - "8189:8189/udp"  # WebRTC ICE UDP
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8889" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  default:
+    name: app-network

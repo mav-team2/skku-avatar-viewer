@@ -1,12 +1,30 @@
+import '../css/index.css';
 import { GameApplication } from './core/GameApplication';
 import { AdminPanel } from './ui/AdminPanel';
 import { easterEggHandler } from './utils/EasterEggHandler';
+import { WebRTCManager } from './network/WebRTCManager';
 
 // Configuration
 const GAME_SERVER_URL = import.meta.env.VITE_GAME_SERVER_URL || 'ws://localhost:8080';
+const WHEP_URL = import.meta.env.VITE_WHEP_URL || 'http://localhost:8889/mystream/whep';
 
 async function main(): Promise<void> {
   console.log('🎮 SKKU Avatar Viewer Starting...');
+
+  // Setup WebRTC video background
+  const videoElement = document.getElementById('background-video') as HTMLVideoElement;
+  if (!videoElement) {
+    throw new Error('Background video element not found');
+  }
+
+  console.log('[WebRTC] WHEP URL:', WHEP_URL);
+
+  const webrtcManager = new WebRTCManager(videoElement, {
+    whepUrl: WHEP_URL,
+  });
+
+  // Start WebRTC connection
+  webrtcManager.connect();
 
   // Create game application
   const game = new GameApplication(GAME_SERVER_URL);
@@ -64,6 +82,7 @@ async function main(): Promise<void> {
   window.addEventListener('beforeunload', () => {
     adminPanel.destroy();
     game.destroy();
+    webrtcManager.disconnect();
   });
 
   console.log('✅ SKKU Avatar Viewer Ready');
