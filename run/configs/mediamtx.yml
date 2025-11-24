@@ -1,0 +1,26 @@
+## MediaMTX configuration
+## Enable protocols needed: RTSP ingest, HLS output, plus existing RTMP/WebRTC if desired.
+rtsp: yes # (default yes, explicit for clarity)
+rtmp: yes # keep RTMP if still needed
+webrtc: yes # keep WebRTC if needed
+logLevel: info # 필요 시 debug
+
+## Optional: force remuxing so HLS is generated for every path as soon as there's a publisher
+# hlsAlwaysRemux: yes
+
+paths:
+  ## Generic pattern: allow publishers to create any path (including via RTSP push)
+  # all:
+  ## Uncomment below if you want to allow only publishing (no pulling from elsewhere)
+  ## source: publisher
+
+  ## Example of pulling (ingesting) from an external RTSP camera and converting to HLS automatically:
+  # camera1:
+  #   source: rtsp://your-camera-ip:554/stream
+  #   sourceOnDemand: no
+  # After starting, HLS playlist will be at: http://<host>:8888/camera1/index.m3u8
+
+  ## Example manual publishing path (ffmpeg pushing via RTSP):
+  mystream:
+    source: publisher
+    ## Access HLS at: http://<host>:8888/mystream/index.m3u8

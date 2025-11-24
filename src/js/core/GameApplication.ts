@@ -33,8 +33,10 @@ export class GameApplication {
     // WebSocket 연결
     this.wsManager.connect();
 
-    // Initialize Protobuf
-    await protobufHandler.initialize();
+    // Initialize Protobuf (non-blocking - game works without it)
+    protobufHandler.initialize().catch((error) => {
+      console.warn('[GameApplication] Protobuf init failed, using JSON fallback:', error);
+    });
 
     console.log('[GameApplication] Initialized');
   }

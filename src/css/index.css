@@ -10,39 +10,31 @@ body {
   height: 100%;
   overflow: hidden;
   background-color: #000;
-}
-
-body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
     Ubuntu, Cantarell, sans-serif;
-  margin: 0 !important;
-  padding: 0 !important;
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
 }
 
 #background-video {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  min-width: 100%;
-  min-height: 100%;
-  width: auto;
-  height: auto;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   z-index: 0;
-  /* Prevent inline element spacing issues */
-  display: block;
+  pointer-events: none;
 }
 
 canvas {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
   z-index: 1;
   pointer-events: none;
+}
+
+#admin-panel {
+  pointer-events: auto;
 }
