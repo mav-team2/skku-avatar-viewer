@@ -7,7 +7,7 @@ export interface GameObjectData {
   y: number;
   type?: string;
   spriteUrl?: string;  // 전체 URL (예: www.domain.com/objects/coin.png)
-  scale?: number;      // 스프라이트 스케일 (기본값: 1.0)
+  scale?: number;      // 스프라이트 스케일 (기본값: 1.0) - 아바타와 같은 스케일 배수
   rotation?: number;   // 회전 각도 (라디안, 기본값: 0)
 }
 
@@ -18,7 +18,8 @@ export class GameObject {
   private sprite!: Sprite; // definite assignment assertion
   private objectType: string;
   private gameContainer: Container;
-  private readonly objectScale: number; // 오브젝트 스케일
+  private readonly desiredSpriteSize: number = 64; // 원하는 스프라이트 표시 크기 (아바타와 동일)
+  private readonly objectScale: number; // 오브젝트 스케일 배수
   private objectRotation: number; // 오브젝트 회전 각도 (라디안)
 
   private constructor(
@@ -53,20 +54,25 @@ export class GameObject {
     if (data.spriteUrl) {
       await gameObject.loadSprite(data.spriteUrl);
     } else {
-      // 기본 플레이스홀더 생성
-      gameObject.sprite = gameObject.createDefaultSprite();
-      gameObject.container.addChild(gameObject.sprite);
+      // 기본 폴백 스프라이트 로드 시도
+      try {
+        await gameObject.loadSprite('/assets/objects/default');
+      } catch {
+        // 폴백 실패 시 플레이스홀더 생성
+        gameObject.sprite = gameObject.createDefaultSprite();
+        gameObject.container.addChild(gameObject.sprite);
+      }
     }
 
     return gameObject;
   }
 
   private createDefaultSprite(): Sprite {
-    // 기본 녹색 사각형 오브젝트
+    // 기본 청록색 사각형 오브젝트 (폴백 시 사용)
     const sprite = new Sprite(Texture.WHITE);
     sprite.width = 24;
     sprite.height = 24;
-    sprite.anchor.set(0.5, 1);
+    sprite.anchor.set(0.5, 0.5);  // 중심 앵커 (아바타와 일관성)
     sprite.tint = 0x4ecdc4;  // 청록색
 
     return sprite;
@@ -80,18 +86,22 @@ export class GameObject {
     try {
       const texture = await spriteManager.loadTexture(url);
       if (texture) {
-        // 스프라이트 생성 및 매트릭스 변환 직접 적용
+        // 스프라이트 생성
         this.sprite = new Sprite(texture);
-        this.sprite.anchor.set(0.5, 1);
+        this.sprite.anchor.set(0.5, 0.5);  // 중심 앵커 (아바타와 일관성)
 
-        // 스케일 적용
-        this.sprite.scale.set(this.objectScale, this.objectScale);
+        // 아바타와 동일한 스케일 계산: 원하는 크기(64px)에 맞게 스케일 조정
+        const originalWidth = texture.width;
+        const baseScale = this.desiredSpriteSize / originalWidth;
+        const finalScale = baseScale * this.objectScale;
+
+        this.sprite.scale.set(finalScale, finalScale);
 
         // 회전 적용 (라디안)
         this.sprite.rotation = this.objectRotation;
 
         this.container.addChild(this.sprite);
-        console.log(`[GameObject ${this.id}] Sprite loaded: ${texture.width}x${texture.height}, scale: ${this.objectScale}, rotation: ${this.objectRotation.toFixed(2)} rad`);
+        console.log(`[GameObject ${this.id}] Sprite loaded: ${texture.width}x${texture.height}, finalScale: ${finalScale.toFixed(2)}, rotation: ${this.objectRotation.toFixed(2)} rad`);
       }
     } catch (error) {
       console.error(`[GameObject] Failed to load sprite: ${error}`);

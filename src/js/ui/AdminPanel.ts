@@ -218,13 +218,13 @@ export class AdminPanel {
     });
 
     // Create Object
-    document.getElementById('create-object')?.addEventListener('click', () => {
+    document.getElementById('create-object')?.addEventListener('click', async () => {
       const x = parseInt((document.getElementById('object-x') as HTMLInputElement).value) || 500;
       const y = parseInt((document.getElementById('object-y') as HTMLInputElement).value) || 350;
       const spriteUrl = (document.getElementById('object-sprite') as HTMLInputElement).value || undefined;
 
       const id = `object_${this.objectCount++}`;
-      this.game.testCreateObject(id, x, y, spriteUrl);
+      await this.game.testCreateObject(id, x, y, spriteUrl);
 
       // Update pickup object ID field
       (document.getElementById('pickup-object-id') as HTMLInputElement).value = id;

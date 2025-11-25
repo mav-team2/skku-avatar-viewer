@@ -56,10 +56,10 @@ async function main(): Promise<void> {
       console.log('[Dev] Test avatar moving');
     }, 2000);
 
-    // Create a test object
-    setTimeout(() => {
-      game.testCreateObject('coin1', 400, 350);
-      console.log('[Dev] Test object created');
+    // Create a test object with ginko image
+    setTimeout(async () => {
+      await game.testCreateObject('ginko1', 400, 350, '/ginko.png');
+      console.log('[Dev] Test object (ginko) created');
     }, 1000);
 
     // Create another avatar

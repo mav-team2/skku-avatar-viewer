@@ -165,8 +165,8 @@ export class GameApplication {
     this.moveAvatar(id, x, y);
   }
 
-  testCreateObject(id: string, x: number, y: number, spriteUrl?: string): void {
-    this.createObject({ id, x, y, spriteUrl });
+  testCreateObject(id: string, x: number, y: number, spriteUrl?: string): Promise<void> {
+    return this.createObject({ id, x, y, spriteUrl });
   }
 
   // Getters
