@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SKKU Avatar Viewer is a real-time 2D multiplayer game viewer built with PixiJS v8, WebSocket, and Protobuf. It displays avatars and game objects that move and interact based on server events.
+SKKU Avatar Viewer is a real-time 2D multiplayer game viewer built with PixiJS v8, WebSocket, and Protobuf. It displays sprite-based avatars and game objects that move and interact based on server events. The project uses async factory patterns for entity creation and supports dynamic sprite loading with automatic fallback to local assets.
 
 ## Development Commands
 
@@ -40,12 +40,18 @@ The application follows a centralized game loop architecture:
 
 ### Sprite Loading System
 
-**SpriteManager** (`src/utils/SpriteManager.ts`) is a singleton that handles all sprite operations:
+**SpriteManager** (`src/js/utils/SpriteManager.ts`) is a singleton that handles all sprite operations:
 
 - **URL Format**: Base URL `www.domain.com/avatar_id` auto-expands to three URLs:
-  - `www.domain.com/avatar_id/stand`
-  - `www.domain.com/avatar_id/walk`
-  - `www.domain.com/avatar_id/run`
+  - `www.domain.com/avatar_id/stand` → mapped to `Idle.png` for local assets
+  - `www.domain.com/avatar_id/walk` → mapped to `Walk.png` for local assets
+  - `www.domain.com/avatar_id/run` → reuses `Walk.png` with faster animation speed
+
+- **Dynamic Frame Extraction**:
+  - Automatically calculates frame count from sprite sheet dimensions
+  - Assumes square frames: `frameWidth = frameHeight = texture.height`
+  - Example: 1536x128 image = 12 frames (128x128 each), 1152x128 = 9 frames
+  - Uses PixiJS `Rectangle` to extract individual frames from sprite sheets
 
 - **Caching Strategy**:
   - Maintains `spriteCache: Map<baseUrl, SpriteSet>`
@@ -53,9 +59,9 @@ The application follows a centralized game loop architecture:
   - Multiple entities requesting same sprite URL share the same loading promise
 
 - **Fallback Behavior**:
-  1. If sprite URL provided but fails to load → keeps default colored rectangle
-  2. If no sprite URL provided → uses default colored rectangle (red for avatars, green for objects)
-  3. Individual action sprites can fail independently (e.g., walk loads but run fails)
+  1. Server sprite fails → automatically falls back to `/assets/avatars/default/`
+  2. Default sprites: `Idle.png` (9 frames), `Walk.png` (12 frames)
+  3. Individual action sprites can fail independently while others succeed
 
 ### WebSocket Communication
 
@@ -70,11 +76,16 @@ The application follows a centralized game loop architecture:
 
 Avatars automatically switch animations based on movement state:
 
-- **Stateless Animation Logic** in `Avatar.update()`:
-  - Compares current position with target position
-  - If distance > 1px → switches to 'walk', sets `isMoving = true`
-  - If distance <= 1px → switches to 'stand', sets `isMoving = false`
-  - Only triggers texture swap when state changes (not every frame)
+- **Constant Speed Movement** in `Avatar.update()`:
+  - Uses normalized direction vectors for consistent movement speed (2 pixels/frame at 60fps)
+  - Distance-based interpolation: `dirX = dx / distance; moveDistance = moveSpeed * deltaTime`
+  - Prevents overshooting: stops exactly at target position
+  - Auto-switches animation: distance > 1px → 'walk', distance ≤ 1px → 'stand'
+
+- **Animation Speeds** (at 60fps):
+  - Idle: `animationSpeed = 0.15` (~2.7 seconds for 9 frames)
+  - Walk: `animationSpeed = 0.2` (~3 seconds for 12 frames)
+  - Run: `animationSpeed = 0.3` (faster)
 
 - Manual animation control via `setAction(action: SpriteAction)` for custom behaviors
 
@@ -112,6 +123,22 @@ Avatars automatically switch animations based on movement state:
 '@assets' → './src/assets'
 ```
 
+## Default Sprite Assets
+
+Located in `public/assets/avatars/default/`:
+
+- **Idle.png**: 1152x128 (9 frames of 128x128 each) - Idle/standing animation
+- **Walk.png**: 1536x128 (12 frames of 128x128 each) - Walking animation
+
+These are used as fallback when:
+1. No `spriteUrl` is provided in `AvatarData`
+2. Server sprite URL fails to load
+
+Action mapping for local assets:
+- `'stand'` → `'Idle.png'`
+- `'walk'` → `'Walk.png'`
+- `'run'` → `'Walk.png'` (reused with faster animation speed)
+
 ## Testing & Debugging
 
 ### Admin Panel (Easter Egg)
@@ -135,13 +162,64 @@ Change `GAME_SERVER_URL` in `src/main.ts` to point to your game server (defaults
 
 ## Important Patterns
 
+### Async Factory Pattern for Entity Creation
+
+**CRITICAL**: Entities use static factory methods instead of public constructors to ensure sprites are fully loaded before creation:
+
+```typescript
+// Avatar and GameObject have PRIVATE constructors
+private constructor(data, gameContainer) { ... }
+
+// Use static async factory method
+static async create(data, gameContainer): Promise<Avatar> {
+  const avatar = new Avatar(data, gameContainer);
+  await avatar.loadSprites(spriteUrl);  // Pre-load sprites
+  return avatar;
+}
+```
+
+**Why**: Prevents the "large sprite flash" bug where unscaled textures briefly appear before scaling is applied.
+
+**GameApplication usage**:
+```typescript
+async createAvatar(data: AvatarData): Promise<void> {
+  const avatar = await Avatar.create(data, this.gameContainer);
+  this.avatars.set(data.id, avatar);
+}
+
+async createObject(data: GameObjectData): Promise<void> {
+  const gameObject = await GameObject.create(data, this.gameContainer);
+  this.gameObjects.set(data.id, gameObject);
+}
+```
+
+### Matrix Scale Application
+
+Scale is applied ONCE at sprite creation, not on every animation change:
+
+```typescript
+// In loadSprites() - ONE TIME ONLY
+const finalScale = (desiredSize / originalWidth) * avatarScale;
+sprite.scale.set(finalScale, finalScale);
+
+// In playAnimation() - PRESERVE scale
+const currentScale = sprite.scale;  // Save scale
+sprite.textures = newTextures;       // Change animation
+sprite.scale.set(currentScale);      // Restore scale
+```
+
+**Avatar Scale**: Default 1.5x (configurable via `AvatarData.scale`)
+**GameObject Scale**: Default 1.0x (configurable via `GameObjectData.scale`)
+**GameObject Rotation**: Configurable via `GameObjectData.rotation` (radians)
+
 ### Entity Lifecycle
-1. Create entity via GameApplication methods (e.g., `createAvatar`)
-2. Entity adds itself to `gameContainer` in constructor
-3. GameApplication stores entity in Map by ID
-4. GameApplication calls `entity.update()` every frame in game loop
-5. On removal, call `entity.destroy()` which removes from container and destroys sprite
-6. Delete from GameApplication's Map
+1. Create entity via async factory: `await Avatar.create(data, gameContainer)`
+2. Entity constructor is private, adds container to `gameContainer`
+3. Factory method pre-loads sprites before returning entity
+4. GameApplication stores entity in Map by ID
+5. GameApplication calls `entity.update()` every frame in game loop (avatars only)
+6. On removal, call `entity.destroy()` which removes from container and destroys sprite
+7. Delete from GameApplication's Map
 
 ### Adding New Message Types
 1. Add to `MessageType` const in `src/network/WebSocketManager.ts`
@@ -158,13 +236,32 @@ When adding sprite URLs, format must be:
 
 SpriteManager automatically appends `/stand`, `/walk`, `/run` for avatars.
 
+### GameObject Features
+
+GameObjects support additional transformation properties:
+
+```typescript
+interface GameObjectData {
+  scale?: number;      // Default 1.0, applied at creation
+  rotation?: number;   // Radians, default 0
+}
+
+// Dynamic control
+gameObject.setRotation(Math.PI / 4);     // Set rotation in radians
+gameObject.setRotationDegrees(45);        // Set rotation in degrees
+console.log(gameObject.rotation);         // Get in radians
+console.log(gameObject.rotationDegrees);  // Get in degrees
+```
+
 ## Common Pitfalls
 
-1. **Don't modify entity collections while iterating**: Use `forEach` for read-only iteration, collect IDs first if deleting
-2. **Sprite URLs must use https://**: `SpriteManager.buildSpriteUrl()` automatically prepends protocol
-3. **Container hierarchy matters**: All game entities must be added to `gameContainer`, not `app.stage` directly
-4. **Texture scale preservation**: When swapping textures, always preserve `sprite.scale` value
-5. **Admin panel callbacks bypass WebSocket**: They directly call GameApplication methods, useful for testing
+1. **Never use `new Avatar()` or `new GameObject()` directly**: Always use `await Avatar.create()` or `await GameObject.create()` - constructors are private
+2. **Don't modify entity collections while iterating**: Use `forEach` for read-only iteration, collect IDs first if deleting
+3. **Sprite sheet frame calculation**: Assumes square frames where `frameWidth = texture.height`. Non-square frames won't work correctly
+4. **Container hierarchy matters**: All game entities must be added to `gameContainer`, not `app.stage` directly
+5. **Texture scale preservation**: When swapping textures in `playAnimation()`, always preserve `sprite.scale` value
+6. **Admin panel callbacks bypass WebSocket**: They directly call GameApplication methods, useful for testing
+7. **GameObject rotation uses radians**: Use `Math.PI / 180 * degrees` to convert, or use `setRotationDegrees()` helper
 
 ## Performance Considerations
 
